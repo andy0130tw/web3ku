@@ -9,6 +9,12 @@ const netDesc = {
   42: { id: 42, name: 'testnet (Kovan)',   etherscanPrefix: 'kovan.' },
 }
 
+/**
+ * Initiate the provider from the browser, aka givenProvider. This provider is
+ * attached to the app-wide web3 instance if it is initiated.
+ *
+ * @return {Web3Provider} Web3 given provider
+ */
 function getEthereumProvider() {
   if (!Web3.givenProvider)
     return null
@@ -19,6 +25,11 @@ function getEthereumProvider() {
   return Web3.givenProvider
 }
 
+/**
+ * Get an app-wide web3 instance. Initiate its provider if necessery.
+ *
+ * @return {Web3} The web3 instance
+ */
 function getWeb3Instance() {
   if (!web3) {
     web3 = new Web3()
@@ -27,17 +38,24 @@ function getWeb3Instance() {
   return web3
 }
 
+/**
+ * Load the current address eagerly. If the address is hide because of
+ * privacy mode or compliance of EIP-1102, ask for the user's permission first.
+ *
+ * @return {Promise<*>} Resolve to the account list; usually an array
+ */
 function getCurrentAddress() {
   getWeb3Instance()
-  const prov = getEthereumProvider()
+  const ethProv = getEthereumProvider()
 
-  return Promise.resolve()
-  .then(() => {
-    if (web3.currentProvider.enable) {
-      return web3.currentProvider.enable()
-    } else {
-      return web3.eth.getAccounts()
+  return web3.eth.getAccounts()
+  .then(accList_ => {
+    if ((accList_ && accList_.length) || !ethProv.enable) {
+      // older/unsupported EthereumProvider (for EIP-1102)
+      return Promise.resolve(accList_);
     }
+    // EP of MetaMask 5+ (EIP-1102-compliant) with privacy mode on
+    return ethProv.enable()
   })
   .then(accList => {
     if (accList.length) {
@@ -47,8 +65,17 @@ function getCurrentAddress() {
   })
 }
 
-// sometimes we may expected the callback be called for multiple times,
-// the function thus does not return a promise by design
+
+/**
+ * Poll for the wallet address with a `setInterval` call; when the account
+ * changes, the callback is called.
+ * Note: sometimes we may expected the callback be called for multiple times,
+ * thus this function does not return a promise by design.
+ *
+ * @param  {Web3}     web3     A web3 instance to be listened
+ * @param  {Function} callback The callback to be called
+ * @return {Timer}             The return of setInterval()
+ */
 function watchAccountChange(web3, callback) {
   return setInterval(() => {
     web3.eth.getAccounts().then(acc => {
